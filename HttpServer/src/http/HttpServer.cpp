@@ -183,7 +183,7 @@ void HttpServer::handleRequest(const HttpRequest &req, HttpResponse *resp)
         HttpRequest mutableReq = req;
         middlewareChain_.processBefore(mutableReq);
 
-        // 路由处理
+        // 路由处理，url处理逻辑
         if (!router_.route(mutableReq, resp))
         {
             LOG_INFO << "method：" << req.method() << "，path：" << req.path();

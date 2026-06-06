@@ -3,6 +3,7 @@
 namespace http
 {
 
+// 封装响应头，具体响应体部分在业务逻辑部分封装
 // HTTP/1.1 200 OK\r\n           ← 状态行
 // Connection: Keep-Alive\r\n    ← 连接模式
 // Content-Type: text/html\r\n   ← 自定义 Header

@@ -6,68 +6,45 @@ namespace http
 namespace router
 {
 
-void Router::registerHandler(HttpRequest::Method method, const std::string &path, HandlerPtr handler)
-{
-    RouteKey key{method, path};
-    handlers_[key] = std::move(handler);
-}
-
+// 注册回调函数
+// 在业务逻辑（GomokuServer.cpp）的 initializeRouter 方法中调用，用于添加路由处理逻辑
 void Router::registerCallback(HttpRequest::Method method, const std::string &path, const HandlerCallback &callback)
 {
     RouteKey key{method, path};
     callbacks_[key] = std::move(callback);
 }
 
+// 核心路由分发函数，在httpserver中调用，根据请求方法和路径匹配回调函数
+// 按优先级依次查找：精确 callback → 动态 callback
+// 返回 true 表示找到并执行了对应处理器，false 表示无匹配路由（应返回 404）
 bool Router::route(const HttpRequest &req, HttpResponse *resp)
 {
     RouteKey key{req.method(), req.path()};
 
-    // 查找处理器
-    auto handlerIt = handlers_.find(key);
-    if (handlerIt != handlers_.end())
+    // 精确匹配回调函数
+    auto it = callbacks_.find(key);
+    if (it != callbacks_.end())
     {
-        handlerIt->second->handle(req, resp);
+        // 执行具体业务逻辑，it->second是Lambda函数
+        it->second(req, resp);
         return true;
     }
 
-    // 查找回调函数
-    auto callbackIt = callbacks_.find(key);
-    if (callbackIt != callbacks_.end())
-    {
-        callbackIt->second(req, resp);
-        return true;
-    }
-
-    // 查找动态路由处理器
-    for (const auto &[method, pathRegex, handler] : regexHandlers_)
-    {
-        std::smatch match;
-        std::string pathStr(req.path());
-        // 如果方法匹配并且动态路由匹配，则执行处理器
-        if (method == req.method() && std::regex_match(pathStr, match, pathRegex))
-        {
-            // Extract path parameters and add them to the request
-            HttpRequest newReq(req); // 因为这里需要用这一次所以是可以改的
-            extractPathParameters(match, newReq);
-            
-            handler->handle(newReq, resp);
-            return true;
-        }
-    }
-
-    // 查找动态路由回调函数
+    // 动态路由匹配
+    // URL 包含可变部分，如用户 ID，不能穷举所有值，必须用正则：
+    // GET /user/10086   → 动态匹配 "/user/:id"，提取 param1="10086"
+    // GET /user/42      → 动态匹配 "/user/:id"，提取 param1="42"
     for (const auto &[method, pathRegex, callback] : regexCallbacks_)
     {
         std::smatch match;
         std::string pathStr(req.path());
-        // 如果方法匹配并且动态路由匹配，则执行回调函数
         if (method == req.method() && std::regex_match(pathStr, match, pathRegex))
         {
-             // Extract path parameters and add them to the request
-            HttpRequest newReq(req); // 因为这里需要用这一次所以是可以改的
+            // 提取路径参数并注入到请求副本中
+            HttpRequest newReq(req);
             extractPathParameters(match, newReq);
 
-            callback(req, resp);
+            callback(newReq, resp);
             return true;
         }
     }

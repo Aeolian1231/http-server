@@ -58,16 +58,10 @@ public:
         httpCallback_ = cb;
     }
 
-    // 注册静态路由处理器
+    // 注册静态路由（精确匹配）
     void Get(const std::string& path, const HttpCallback& cb)
     {
         router_.registerCallback(HttpRequest::kGet, path, cb);
-    }
-    
-    // 注册静态路由处理器
-    void Get(const std::string& path, router::Router::HandlerPtr handler)
-    {
-        router_.registerHandler(HttpRequest::kGet, path, handler);
     }
 
     void Post(const std::string& path, const HttpCallback& cb)
@@ -75,21 +69,10 @@ public:
         router_.registerCallback(HttpRequest::kPost, path, cb);
     }
 
-    void Post(const std::string& path, router::Router::HandlerPtr handler)
+    // 注册动态路由
+    void addRoute(HttpRequest::Method method, const std::string& path, const HttpCallback& cb)
     {
-        router_.registerHandler(HttpRequest::kPost, path, handler);
-    }
-
-    // 注册动态路由处理器
-    void addRoute(HttpRequest::Method method, const std::string& path, router::Router::HandlerPtr handler)
-    {
-        router_.addRegexHandler(method, path, handler);
-    }
-
-    // 注册动态路由处理函数
-    void addRoute(HttpRequest::Method method, const std::string& path, const router::Router::HandlerCallback& callback)
-    {
-        router_.addRegexCallback(method, path, callback);
+        router_.addRegexCallback(method, path, cb);
     }
 
     // 设置会话管理器

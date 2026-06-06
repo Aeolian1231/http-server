@@ -14,16 +14,8 @@
 #include "../../../HttpServer/include/utils/JsonUtil.h"
 
 
-class LoginHandler;
-class EntryHandler;
-class RegisterHandler;
-class MenuHandler;
-class AiGameStartHandler;
-class LogoutHandler;
-class AiGameMoveHandler;
-class GameBackendHandler;
 
-#define DURING_GAME 1 
+#define DURING_GAME 1
 #define GAME_OVER 2
 
 #define MAX_AIBOT_NUM 4096
@@ -42,7 +34,7 @@ private:
     void initializeSession();
     void initializeRouter();
     void initializeMiddleware();
-    
+
     void setSessionManager(std::unique_ptr<http::session::SessionManager> manager)
     {
         httpServer_.setSessionManager(std::move(manager));
@@ -52,7 +44,7 @@ private:
     {
         return httpServer_.getSessionManager();
     }
-    
+
     void restartChessGameVsAi(const http::HttpRequest& req, http::HttpResponse* resp);
     void getBackendData(const http::HttpRequest& req, http::HttpResponse* resp);
 
@@ -89,16 +81,21 @@ private:
         }
         return 0;
     }
-    
-private:
-    friend class EntryHandler;
-    friend class LoginHandler;
-    friend class RegisterHandler;
-    friend class MenuHandler;
-    friend class AiGameStartHandler;
-    friend class LogoutHandler;
-    friend class AiGameMoveHandler;
-    friend class GameBackendHandler;
+
+    // --- 原 Handler::handle() 逻辑移入 ---
+    void handleEntry(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleLogin(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleRegister(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleLogout(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleMenu(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleAiGameStart(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleAiGameMove(const http::HttpRequest& req, http::HttpResponse* resp);
+    void handleGameBackend(const http::HttpRequest& req, http::HttpResponse* resp);
+
+    // --- 原 Handler 的辅助方法 ---
+    int queryUserId(const std::string& username, const std::string& password);
+    int insertUser(const std::string& username, const std::string& password);
+    bool isUserExist(const std::string& username);
 
 private:
     enum GameType
@@ -116,7 +113,7 @@ private:
     std::mutex                                       mutexForAiGames_;
     // userId -> 是否在游戏中
     std::unordered_map<int, bool>                    onlineUsers_;
-    std::mutex                                       mutexForOnlineUsers_; 
+    std::mutex                                       mutexForOnlineUsers_;
     // 最高在线人数
     std::atomic<int>                                 maxOnline_;
 };
