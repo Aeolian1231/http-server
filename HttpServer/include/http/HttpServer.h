@@ -84,6 +84,7 @@ public:
     // 获取会话管理器
     session::SessionManager* getSessionManager() const
     {
+        // 返回unique_ptr裸指针
         return sessionManager_.get();
     }
 

@@ -1,4 +1,4 @@
-#include "AiGame.h"
+#include "../include/AiGame.h"
 
 #include <chrono>
 #include <thread>

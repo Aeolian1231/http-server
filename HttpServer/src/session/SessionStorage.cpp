@@ -1,5 +1,4 @@
-#include "../include/session/SessionStorage.h"
-#include <iostream>
+#include "../../include/session/SessionStorage.h"
 
 namespace http
 {
@@ -32,6 +31,22 @@ std::shared_ptr<Session> MemorySessionStorage::load(const std::string& sessionId
 
     // 如果会话不存在或已过期，则返回nullptr
     return nullptr;
+}
+
+// 清理所有已过期的会话
+void MemorySessionStorage::cleanExpired()
+{
+    for (auto it = sessions_.begin(); it != sessions_.end(); )
+    {
+        if (it->second->isExpired())
+        {
+            it = sessions_.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
 }
 
 // 通过会话ID从存储中移除会话

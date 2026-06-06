@@ -1,12 +1,18 @@
-#include "../include/session/Session.h"
-
-#include "../include/session/SessionManager.h"
+#include "../../include/session/Session.h"
+#include "../../include/session/SessionManager.h"
 
 namespace http
 {
 namespace session
 {
+// 定义session相关工具函数
 
+//     当前存储
+//     sessionId_;      // 1. 会话 ID
+//     data_;           // 2. 键值对数据
+//     expiryTime_;     // 3. 过期时刻
+//     maxAge_;         // 4. 过期时长（秒）
+//     sessionManager_; // 5. 回指 Manager 的指针（不存储，仅引用）
 Session::Session(const std::string& sessionId, SessionManager* sessionManager, int maxAge)
     : sessionId_(sessionId)
     , maxAge_(maxAge)

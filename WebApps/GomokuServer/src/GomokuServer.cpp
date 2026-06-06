@@ -53,6 +53,18 @@ void GomokuServer::initializeMiddleware()
     httpServer_.addMiddleware(corsMiddleware);
 }
 
+// session管理
+// handleEntry (237)	        没有	返回静态 HTML 入口页，谁都能看
+// handleRegister (363)	        没有	注册新用户，还没有账号，更没有 session
+// getBackendData (144)	        没有	返回总在线人数/注册人数，公共数据
+// handleGameBackend (756)	    没有	返回静态后台页面
+// handleLogin (281)	        有	    登录成功后要把 userId/username 写入 session
+// handleLogout (441)	        有	    需要清空并销毁当前用户的 session
+// handleMenu (491)	            有	    需要校验 isLoggedIn，拒绝未登录用户
+// handleAiGameStart (550)	    有	    需要 userId 来创建该用户的棋局
+// handleAiGameMove (596)	    有	    需要 userId 找到该用户的棋局、执行落子
+// restartChessGameVsAi (111)	有	    同上
+
 // 注册回调函数
 // httpServer是HttpServer类型，.Get()是HttpServer的函数
 // 把 lambda 以 {GET, "/"} 为 key 存入 callbacks_。

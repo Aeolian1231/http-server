@@ -1,7 +1,6 @@
 #include "../../../include/middleware/cors/CorsMiddleware.h"
 #include <algorithm>
 #include <sstream>
-#include <iostream>
 #include <muduo/base/Logging.h>
 
 namespace http 
