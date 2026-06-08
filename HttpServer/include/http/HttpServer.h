@@ -111,6 +111,7 @@ private:
     void onRequest(const muduo::net::TcpConnectionPtr&, const HttpRequest&);
 
     void handleRequest(const HttpRequest& req, HttpResponse* resp);
+    void sendToClient(const muduo::net::TcpConnectionPtr& conn, const void* data, size_t len);
     
 private:
     muduo::net::InetAddress                      listenAddr_; // 监听地址

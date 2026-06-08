@@ -128,7 +128,7 @@ void HttpServer::onMessage(const muduo::net::TcpConnectionPtr &conn,
         if (!context->parseRequest(buf, receiveTime)) // 解析一个http请求
         {
             // 如果解析http报文过程中出错
-            conn->send("HTTP/1.1 400 Bad Request\r\n\r\n");
+            sendToClient(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
             conn->shutdown();
         }
         // 如果buf缓冲区中解析出一个完整的数据包才封装响应报文
@@ -142,9 +142,23 @@ void HttpServer::onMessage(const muduo::net::TcpConnectionPtr &conn,
     {
         // 捕获异常，返回错误信息
         LOG_ERROR << "Exception in onMessage: " << e.what();
-        conn->send("HTTP/1.1 400 Bad Request\r\n\r\n");
+        sendToClient(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
         conn->shutdown();
     }
+}
+
+// 统一发送：SSL 模式下加密发送，否则直接 TCP 发送
+void HttpServer::sendToClient(const muduo::net::TcpConnectionPtr& conn,
+                              const void* data, size_t len)
+{
+    if (useSSL_) {
+        auto it = sslConns_.find(conn);
+        if (it != sslConns_.end() && it->second->isHandshakeCompleted()) {
+            it->second->send(data, len);
+            return;
+        }
+    }
+    conn->send(data, len);
 }
 
 // 请求处理：调用回调填充响应 → 序列化 → 发送 → 短连接则关闭
@@ -164,7 +178,7 @@ void HttpServer::onRequest(const muduo::net::TcpConnectionPtr &conn, const HttpR
     // 打印完整的响应内容用于调试
     LOG_INFO << "Sending response:\n" << buf.toStringPiece().as_string();
 
-    conn->send(&buf);
+    sendToClient(conn, buf.peek(), buf.readableBytes());
     // 如果是短连接的话，返回响应报文后就断开连接
     if (response.closeConnection())
     {

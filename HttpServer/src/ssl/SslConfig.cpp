@@ -2,6 +2,8 @@
 
 namespace ssl
 {
+
+// 初始化 SSL 配置默认值，默认使用 TLS 1.2
 SslConfig::SslConfig()
     : version_(SSLVersion::TLS_1_2)
     , cipherList_("HIGH:!aNULL:!MDS")

@@ -4,6 +4,7 @@
 
 namespace ssl
 {
+// 保存配置，初始化 ctx_ 为空
 SslContext::SslContext(const SslConfig& config)
     : ctx_(nullptr)
     , config_(config)
@@ -11,6 +12,7 @@ SslContext::SslContext(const SslConfig& config)
 
 }
 
+// 释放 OpenSSL 上下文资源
 SslContext::~SslContext()
 {
     if (ctx_)
@@ -19,6 +21,7 @@ SslContext::~SslContext()
     }
 }
 
+// 完整初始化流程：启动 OpenSSL → 创建 CTX → 加载证书 → 协议 → 会话缓存
 bool SslContext::initialize()
 {
     // 初始化 OpenSSL
@@ -59,6 +62,7 @@ bool SslContext::initialize()
     return true;
 }
 
+// 加载服务器证书、私钥（并校验匹配），以及可选的证书链文件
 bool SslContext::loadCertificates()
 {
     // 加载证书
@@ -98,6 +102,7 @@ bool SslContext::loadCertificates()
     return true;
 }
 
+// 根据配置禁用不需要的协议版本，并设置加密套件列表
 bool SslContext::setupProtocol()
 {
     // 设置 SSL/TLS 协议版本
@@ -133,6 +138,7 @@ bool SslContext::setupProtocol()
     return true;
 }
 
+// 启用服务器端会话缓存，设置缓存大小和超时时间
 void SslContext::setupSessionCache()
 {
     SSL_CTX_set_session_cache_mode(ctx_, SSL_SESS_CACHE_SERVER);
@@ -140,6 +146,7 @@ void SslContext::setupSessionCache()
     SSL_CTX_set_timeout(ctx_, config_.getSessionTimeout());
 }
 
+// 从 OpenSSL 错误队列获取详细错误信息并记录日志
 void SslContext::handleSslError(const char* msg)
 {
     char buf[256];

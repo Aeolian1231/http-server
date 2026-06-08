@@ -5,16 +5,7 @@
 namespace ssl
 {
 
-// 自定义 BIO 方法
-static BIO_METHOD* createCustomBioMethod() 
-{
-    BIO_METHOD* method = BIO_meth_new(BIO_TYPE_MEM, "custom");
-    BIO_meth_set_write(method, SslConnection::bioWrite);
-    BIO_meth_set_read(method, SslConnection::bioRead);
-    BIO_meth_set_ctrl(method, SslConnection::bioCtrl);
-    return method;
-}
-
+// 初始化 SSL 对象和 BIO，设置为服务器模式，并绑定 muduo 消息回调到 onRead
 SslConnection::SslConnection(const TcpConnectionPtr& conn, SslContext* ctx)
     : ssl_(nullptr)
     , ctx_(ctx)
@@ -55,6 +46,7 @@ SslConnection::SslConnection(const TcpConnectionPtr& conn, SslContext* ctx)
                  std::placeholders::_2, std::placeholders::_3));
 }
 
+// 释放 SSL 对象（连同关联的 BIO）
 SslConnection::~SslConnection() 
 {
     if (ssl_) 
@@ -63,12 +55,14 @@ SslConnection::~SslConnection()
     }
 }
 
+// 启动 SSL 握手流程，设置为服务器 accept 模式
 void SslConnection::startHandshake() 
 {
     SSL_set_accept_state(ssl_);
     handleHandshake();
 }
 
+// 发送应用层数据：先 SSL 加密，再通过 writeBio_ 取出密文，最终调用 TCP 连接发送
 void SslConnection::send(const void* data, size_t len) 
 {
     if (state_ != SSLState::ESTABLISHED) {
@@ -94,8 +88,9 @@ void SslConnection::send(const void* data, size_t len)
     }
 }
 
-void SslConnection::onRead(const TcpConnectionPtr& conn, BufferPtr buf, 
-                         muduo::Timestamp time) 
+// 接收 TCP 数据：握手阶段推入 BIO 继续握手，已建立阶段 SSL_read 解密后回调上层
+void SslConnection::onRead(const TcpConnectionPtr& conn, BufferPtr buf,
+                         muduo::Timestamp time)
 {
     if (state_ == SSLState::HANDSHAKE) {
         // 将数据写入 BIO
@@ -113,6 +108,8 @@ void SslConnection::onRead(const TcpConnectionPtr& conn, BufferPtr buf,
             decryptedBuffer.append(decryptedData, ret);
             
             // 调用上层回调处理解密后的数据
+            // 为什么不自然返回？函数重入、栈膨胀问题
+            // 不会无限调用：SSL_read读取为空ret = 0会自然退出
             if (messageCallback_) {
                 messageCallback_(conn, &decryptedBuffer, time);
             }
@@ -120,7 +117,8 @@ void SslConnection::onRead(const TcpConnectionPtr& conn, BufferPtr buf,
     }
 }
 
-void SslConnection::handleHandshake() 
+// 执行 SSL 握手：成功则标记 ESTABLISHED；需要继续读/写则等待；失败则关闭连接
+void SslConnection::handleHandshake()
 {
     int ret = SSL_do_handshake(ssl_);
     
@@ -139,6 +137,7 @@ void SslConnection::handleHandshake()
     
     int err = SSL_get_error(ssl_, ret);
     switch (err) {
+        // SSL_do_handshake() 本质是非阻塞的——它只处理当前 BIO 缓冲区中的数据
         case SSL_ERROR_WANT_READ:
         case SSL_ERROR_WANT_WRITE:
             // 正常的握手过程，需要继续
@@ -155,94 +154,5 @@ void SslConnection::handleHandshake()
         }
     }
 }
-
-void SslConnection::onEncrypted(const char* data, size_t len) 
-{
-    writeBuffer_.append(data, len);
-    conn_->send(&writeBuffer_);
-}
-
-void SslConnection::onDecrypted(const char* data, size_t len) 
-{
-    decryptedBuffer_.append(data, len);
-}
-
-SSLError SslConnection::getLastError(int ret) 
-{
-    int err = SSL_get_error(ssl_, ret);
-    switch (err) 
-    {
-        case SSL_ERROR_NONE:
-            return SSLError::NONE;
-        case SSL_ERROR_WANT_READ:
-            return SSLError::WANT_READ;
-        case SSL_ERROR_WANT_WRITE:
-            return SSLError::WANT_WRITE;
-        case SSL_ERROR_SYSCALL:
-            return SSLError::SYSCALL;
-        case SSL_ERROR_SSL:
-            return SSLError::SSL;
-        default:
-            return SSLError::UNKNOWN;
-    }
-}
-
-void SslConnection::handleError(SSLError error) 
-{
-    switch (error) 
-    {
-        case SSLError::WANT_READ:
-        case SSLError::WANT_WRITE:
-            // 需要等待更多数据或写入缓冲区可用
-            break;
-        case SSLError::SSL:
-        case SSLError::SYSCALL:
-        case SSLError::UNKNOWN:
-            LOG_ERROR << "SSL error occurred: " << ERR_error_string(ERR_get_error(), nullptr);
-            state_ = SSLState::ERROR;
-            conn_->shutdown();
-            break;
-        default:
-            break;
-    }
-}
-
-int SslConnection::bioWrite(BIO* bio, const char* data, int len) 
-{
-    SslConnection* conn = static_cast<SslConnection*>(BIO_get_data(bio));
-    if (!conn) return -1;
-
-    conn->conn_->send(data, len);
-    return len;
-}
-
-int SslConnection::bioRead(BIO* bio, char* data, int len) 
-{
-    SslConnection* conn = static_cast<SslConnection*>(BIO_get_data(bio));
-    if (!conn) return -1;
-
-    size_t readable = conn->readBuffer_.readableBytes();
-    if (readable == 0) 
-    {
-        return -1;  // 无数据可读
-    }
-
-    size_t toRead = std::min(static_cast<size_t>(len), readable);
-    memcpy(data, conn->readBuffer_.peek(), toRead);
-    conn->readBuffer_.retrieve(toRead);
-    return toRead;
-}
-
-long SslConnection::bioCtrl(BIO* bio, int cmd, long num, void* ptr) 
-{
-    switch (cmd) 
-    {
-        case BIO_CTRL_FLUSH:
-            return 1;
-        default:
-            return 0;
-    }
-}
-
 
 } // namespace ssl 
