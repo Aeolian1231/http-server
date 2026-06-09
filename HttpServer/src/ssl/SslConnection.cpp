@@ -1,4 +1,5 @@
 #include "../../include/ssl/SslConnection.h"
+#include "../../include/utils/LogUtil.h"
 #include <muduo/base/Logging.h>
 #include <openssl/err.h>
 
@@ -19,15 +20,17 @@ SslConnection::SslConnection(const TcpConnectionPtr& conn, SslContext* ctx)
     ssl_ = SSL_new(ctx_->getNativeHandle());
     if (!ssl_) {
         LOG_ERROR << "Failed to create SSL object: " << ERR_error_string(ERR_get_error(), nullptr);
+        LOG_UTIL_ERROR("SSL: Failed to create SSL object");
         return;
     }
 
     // 创建 BIO
     readBio_ = BIO_new(BIO_s_mem());
     writeBio_ = BIO_new(BIO_s_mem());
-    
+
     if (!readBio_ || !writeBio_) {
         LOG_ERROR << "Failed to create BIO objects";
+        LOG_UTIL_ERROR("SSL: Failed to create BIO objects");
         SSL_free(ssl_);
         ssl_ = nullptr;
         return;
@@ -63,19 +66,22 @@ void SslConnection::startHandshake()
 }
 
 // 发送应用层数据：先 SSL 加密，再通过 writeBio_ 取出密文，最终调用 TCP 连接发送
-void SslConnection::send(const void* data, size_t len) 
+void SslConnection::send(const void* data, size_t len)
 {
     if (state_ != SSLState::ESTABLISHED) {
         LOG_ERROR << "Cannot send data before SSL handshake is complete";
+        LOG_UTIL_WARN("SSL send failed: handshake not complete");
         return;
     }
-    
+
     int written = SSL_write(ssl_, data, len);
     if (written <= 0) {
         int err = SSL_get_error(ssl_, written);
         LOG_ERROR << "SSL_write failed: " << ERR_error_string(err, nullptr);
+        LOG_UTIL_ERROR("SSL_write failed: " << ERR_error_string(err, nullptr));
         return;
     }
+    LOG_UTIL_INFO("SSL data sent: " << len << " bytes");
     
     char buf[4096];
     int pending;
@@ -127,10 +133,13 @@ void SslConnection::handleHandshake()
         LOG_INFO << "SSL handshake completed successfully";
         LOG_INFO << "Using cipher: " << SSL_get_cipher(ssl_);
         LOG_INFO << "Protocol version: " << SSL_get_version(ssl_);
-        
+        LOG_UTIL_INFO("SSL handshake completed: cipher=" << SSL_get_cipher(ssl_)
+                      << " version=" << SSL_get_version(ssl_));
+
         // 握手完成后，确保设置了正确的回调
         if (!messageCallback_) {
             LOG_WARN << "No message callback set after SSL handshake";
+            LOG_UTIL_WARN("SSL handshake: no message callback set");
         }
         return;
     }
@@ -149,6 +158,7 @@ void SslConnection::handleHandshake()
             unsigned long errCode = ERR_get_error();
             ERR_error_string_n(errCode, errBuf, sizeof(errBuf));
             LOG_ERROR << "SSL handshake failed: " << errBuf;
+            LOG_UTIL_ERROR("SSL handshake failed: " << errBuf);
             conn_->shutdown();  // 关闭连接
             break;
         }

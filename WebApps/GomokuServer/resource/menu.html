@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>卡码五子棋</title>
+    <title>五子棋</title>
     <style>
         /* 全局样式 */
         body {
@@ -118,7 +118,7 @@
 <body>
     <!-- 加载动画 -->
     <div id="loading-container">
-        <div id="loading-title">卡码五子棋</div>
+        <div id="loading-title">五子棋</div>
         <div class="progress-bar">
             <div class="progress-bar-inner"></div>
         </div>
@@ -127,17 +127,16 @@
 
     <!-- 菜单页面 -->
     <div id="menu-container">
-        <h1>欢迎来到卡码五子棋</h1>
+        <h1>欢迎来到五子棋</h1>
         <div class="menu-border"></div>
-        <div class="menu-option" id="play-ai">[1] 对战AI</div>
-        <div class="menu-option">[2] 匹配玩家</div>
-        <div class="menu-option">[0] 退出游戏</div>
+        <div class="menu-option" id="play-ai">对战AI</div>
+        <div class="menu-option" id="exit-game">退出</div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Page loaded'); // 调试日志
-            
+            console.log('Page loaded');
+
             const progressBar = document.querySelector('.progress-bar-inner');
             const loadingContainer = document.getElementById('loading-container');
             const menuContainer = document.getElementById('menu-container');
@@ -149,7 +148,7 @@
 
             // 强制触发重排以确保动画生效
             void progressBar.offsetWidth;
-            
+
             // 设置进度条
             progressBar.style.width = '100%';
 
@@ -167,13 +166,14 @@
                     loadingContainer.style.display = 'none';
                     menuContainer.style.display = 'block';
                 }
-            }, 2000); // 2秒后强制显示菜单
+            }, 2000);
         });
 
-        // 对战AI功能
-        function startAiGame() {
-            const userId = sessionStorage.getItem('userId');
-            
+        // 对战AI
+        document.getElementById('play-ai').addEventListener('click', function() {
+            // 标记为页面内跳转，防止 beforeunload 误登出
+            sessionStorage.setItem('navigating', 'true');
+
             fetch('/aiBot/start', {
                 method: 'GET',
                 headers: {
@@ -182,12 +182,10 @@
             })
             .then(response => response.text())
             .then(html => {
-                // 完全清除当前页面
                 document.open();
                 document.write(html);
                 document.close();
-                
-                // 确保在页面完全加载后初始化
+
                 if (document.readyState === 'loading') {
                     document.addEventListener('DOMContentLoaded', function() {
                         if (typeof initializeGame === 'function') {
@@ -201,47 +199,57 @@
                 }
             })
             .catch(error => {
+                sessionStorage.removeItem('navigating');
                 console.error('Error:', error);
                 alert('启动AI对战失败，请稍后重试！');
             });
-        }
+        });
 
-        // 绑定点击事件到对战AI按钮
-        document.getElementById('play-ai').addEventListener('click', startAiGame);
+        // 退出：调用 logout 后关闭页面
+        document.getElementById('exit-game').addEventListener('click', function() {
+            const userId = sessionStorage.getItem('userId');
+            if (!userId) {
+                window.close();
+                return;
+            }
 
-        // 添加页面刷新/关闭时的处理
+            fetch('/user/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: parseInt(userId), gameType: 1 })
+            })
+            .then(function() {
+                sessionStorage.clear();
+                window.close();
+            })
+            .catch(function() {
+                // 即使请求失败也关闭页面
+                window.close();
+            });
+
+            // 如果 window.close() 无效（非脚本打开的窗口），回退到跳转
+            setTimeout(function() {
+                window.location.href = '/entry';
+            }, 500);
+        });
+
+        // 页面关闭/刷新时自动登出（页面内跳转除外）
         window.addEventListener('beforeunload', function(e) {
+            if (sessionStorage.getItem('navigating') === 'true') {
+                return; // 页面内跳转，不登出
+            }
             const userId = sessionStorage.getItem('userId');
             if (userId) {
-                try {
-                    // 创建 Blob 对象，指定 content-type
-                    const data = new Blob([JSON.stringify({
-                        userId: userId,
-                        type: 'refresh',
-                        gameType: 0
-                    })], { type: 'application/json' });
-
-                    // 使用 navigator.sendBeacon 发送异步请求
-                    const success = navigator.sendBeacon('/user/logout', data);
-                    
-                    // 如果 sendBeacon 失败，尝试使用同步 XMLHttpRequest
-                    if (!success) {
-                        const xhr = new XMLHttpRequest();
-                        xhr.open('POST', '/user/logout', false); // 同步请求
-                        xhr.setRequestHeader('Content-Type', 'application/json');
-                        xhr.send(JSON.stringify({
-                            userId: userId,
-                            type: 'refresh',
-                            gameType: 0
-                        }));
-                    }
-                } catch (error) {
-                    console.error('Logout error:', error);
-                }
+                fetch('/user/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: parseInt(userId), type: 'close', gameType: 1 }),
+                    keepalive: true
+                });
             }
         });
 
-        // 添加页面加载时的用户检查
+        // 页面加载时检查登录状态
         window.addEventListener('load', function() {
             const userId = sessionStorage.getItem('userId');
             if (!userId) {

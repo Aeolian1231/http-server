@@ -1,4 +1,5 @@
 #include "../../include/ssl/SslContext.h"
+#include "../../include/utils/LogUtil.h"
 #include <muduo/base/Logging.h>
 #include <openssl/err.h>
 
@@ -46,12 +47,14 @@ bool SslContext::initialize()
     // 加载证书和私钥
     if (!loadCertificates())
     {
+        LOG_UTIL_ERROR("SSL context init failed: certificate loading error");
         return false;
     }
 
     // 设置协议版本
     if (!setupProtocol())
     {
+        LOG_UTIL_ERROR("SSL context init failed: protocol setup error");
         return false;
     }
 
@@ -152,6 +155,7 @@ void SslContext::handleSslError(const char* msg)
     char buf[256];
     ERR_error_string_n(ERR_get_error(), buf, sizeof(buf));
     LOG_ERROR << msg << ": " << buf;
+    LOG_UTIL_ERROR("SSL error: " << msg << " - " << buf);
 }
 
 }; // namespace ssl

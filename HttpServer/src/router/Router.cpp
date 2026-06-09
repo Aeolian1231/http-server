@@ -1,4 +1,5 @@
 #include "../../include/router/Router.h"
+#include "../../include/utils/LogUtil.h"
 #include <muduo/base/Logging.h>
 
 namespace http
@@ -27,6 +28,8 @@ bool Router::route(const HttpRequest &req, HttpResponse *resp)
     {
         // 执行具体业务逻辑，it->second是Lambda函数
         it->second(req, resp);
+        LOG_UTIL_INFO("Route matched (exact): method=" << static_cast<int>(req.method())
+                      << " path=" << req.path());
         return true;
     }
 
@@ -45,10 +48,14 @@ bool Router::route(const HttpRequest &req, HttpResponse *resp)
             extractPathParameters(match, newReq);
 
             callback(newReq, resp);
+            LOG_UTIL_INFO("Route matched (dynamic): method=" << static_cast<int>(req.method())
+                          << " path=" << req.path());
             return true;
         }
     }
 
+    LOG_UTIL_WARN("No route matched: method=" << static_cast<int>(req.method())
+                  << " path=" << req.path());
     return false;
 }
 

@@ -1,5 +1,6 @@
 #include "../../../include/utils/db/DbConnection.h"
 #include "../../../include/utils/db/DbException.h"
+#include "../../../include/utils/LogUtil.h"
 #include <muduo/base/Logging.h>
 
 namespace http 
@@ -34,11 +35,14 @@ DbConnection::DbConnection(const std::string& host,
             stmt->execute("SET NAMES utf8mb4");
             
             LOG_INFO << "Database connection established";
+            LOG_UTIL_INFO("DB connection established to " << host_ << "/" << database_);
         }
-    } 
-    catch (const sql::SQLException& e) 
+    }
+    catch (const sql::SQLException& e)
     {
         LOG_ERROR << "Failed to create database connection: " << e.what();
+        LOG_UTIL_ERROR("DB connection failed: " << host_ << "/" << database_
+                        << " - " << e.what());
         throw DbException(e.what());
     }
 }
@@ -54,6 +58,7 @@ DbConnection::~DbConnection()
         // 析构函数中不抛出异常
     }
     LOG_INFO << "Database connection closed";
+    LOG_UTIL_INFO("DB connection closed");
 }
 
 bool DbConnection::ping() 
@@ -64,27 +69,13 @@ bool DbConnection::ping()
         std::unique_ptr<sql::ResultSet> rs(stmt->executeQuery("SELECT 1"));
         return true;
     } 
-    catch (const sql::SQLException& e) 
+    catch (const sql::SQLException& e)
     {
         LOG_ERROR << "Ping failed: " << e.what();
+        LOG_UTIL_WARN("DB ping failed: " << e.what());
         return false;
     }
 }
-
-// bool DbConnection::isValid() 
-// {
-//     try 
-//     {
-//         if (!conn_) return false;
-//         std::unique_ptr<sql::Statement> stmt(conn_->createStatement());
-//         stmt->execute("SELECT 1");
-//         return true;
-//     } 
-//     catch (const sql::SQLException&) 
-//     {
-//         return false;
-//     }
-// }
 
 void DbConnection::reconnect()
 {
@@ -105,6 +96,7 @@ void DbConnection::reconnect()
     catch (const sql::SQLException& e)
     {
         LOG_ERROR << "Reconnect failed: " << e.what();
+        LOG_UTIL_ERROR("DB reconnect failed: " << e.what());
         throw DbException(e.what());
     }
 }
@@ -138,11 +130,12 @@ void DbConnection::cleanup()
     catch (const std::exception& e)
     {
         LOG_WARN << "Error cleaning up connection: " << e.what();
-        try 
+        LOG_UTIL_WARN("DB cleanup error: " << e.what());
+        try
         {
             reconnect();
-        } 
-        catch (...) 
+        }
+        catch (...)
         {
             // 忽略重连错误
         }

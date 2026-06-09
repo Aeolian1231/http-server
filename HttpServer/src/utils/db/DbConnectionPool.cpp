@@ -1,5 +1,6 @@
 #include "../../../include/utils/db/DbConnectionPool.h"
 #include "../../../include/utils/db/DbException.h"
+#include "../../../include/utils/LogUtil.h"
 #include <muduo/base/Logging.h>
 
 namespace http 
@@ -34,6 +35,7 @@ void DbConnectionPool::init(const std::string& host,
 
     initialized_ = true;
     LOG_INFO << "Database connection pool initialized with " << poolSize << " connections";
+    LOG_UTIL_INFO("DB connection pool initialized: " << poolSize << " connections");
 }
 
 DbConnectionPool::DbConnectionPool() 
@@ -50,6 +52,7 @@ DbConnectionPool::~DbConnectionPool()
         connections_.pop();
     }
     LOG_INFO << "Database connection pool destroyed";
+    LOG_UTIL_INFO("DB connection pool destroyed");
 }
 
 // 获取连接
@@ -95,9 +98,10 @@ std::shared_ptr<DbConnection> DbConnectionPool::getConnection()
                 cv_.notify_one();
             });
     }
-    catch (const std::exception& e) 
+    catch (const std::exception& e)
     {
         LOG_ERROR << "Failed to get connection: " << e.what();
+        LOG_UTIL_ERROR("DB pool: failed to get connection - " << e.what());
         {
             std::lock_guard<std::mutex> lock(mutex_);
             connections_.push(conn);
@@ -146,18 +150,20 @@ void DbConnectionPool::checkConnections()
                     {
                         conn->reconnect();
                     } 
-                    catch (const std::exception& e) 
+                    catch (const std::exception& e)
                     {
                         LOG_ERROR << "Failed to reconnect: " << e.what();
+                        LOG_UTIL_ERROR("DB pool check: reconnect failed - " << e.what());
                     }
                 }
             }
             
             std::this_thread::sleep_for(std::chrono::seconds(60));
         } 
-        catch (const std::exception& e) 
+        catch (const std::exception& e)
         {
             LOG_ERROR << "Error in check thread: " << e.what();
+            LOG_UTIL_ERROR("DB pool check thread error: " << e.what());
             std::this_thread::sleep_for(std::chrono::seconds(5));
         }
     }

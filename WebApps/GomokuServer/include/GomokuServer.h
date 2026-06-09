@@ -101,8 +101,7 @@ private:
     enum GameType
     {
         NO_GAME = 0,
-        MAN_VS_AI = 1,
-        MAN_VS_MAN = 2
+        MAN_VS_AI = 1
     };
     // 实际业务制定由GomokuServer来完成
     // 需要留意httpServer_提供哪些接口供使用

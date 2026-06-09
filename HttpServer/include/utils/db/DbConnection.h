@@ -8,6 +8,7 @@
 #include <mysql_driver.h>
 #include <mysql/mysql.h>
 #include <muduo/base/Logging.h>
+#include "../LogUtil.h"
 #include "DbException.h"
 
 namespace http 
@@ -53,9 +54,10 @@ public:
             bindParams(stmt.get(), 1, std::forward<Args>(args)...);
             return stmt->executeQuery();
         } 
-        catch (const sql::SQLException& e) 
+        catch (const sql::SQLException& e)
         {
             LOG_ERROR << "Query failed: " << e.what() << ", SQL: " << sql;
+            LOG_UTIL_ERROR("DB query failed: " << e.what() << ", SQL: " << sql);
             throw DbException(e.what());
         }
     }
@@ -74,9 +76,10 @@ public:
             bindParams(stmt.get(), 1, std::forward<Args>(args)...);
             return stmt->executeUpdate();
         } 
-        catch (const sql::SQLException& e) 
+        catch (const sql::SQLException& e)
         {
             LOG_ERROR << "Update failed: " << e.what() << ", SQL: " << sql;
+            LOG_UTIL_ERROR("DB update failed: " << e.what() << ", SQL: " << sql);
             throw DbException(e.what());
         }
     }

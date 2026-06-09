@@ -15,16 +15,18 @@ AiGame::AiGame(int userId)
 }
 
 // 处理人类玩家移动
-bool AiGame::humanMove(int x, int y) 
+bool AiGame::humanMove(int x, int y)
 {
-    if (!isValidMove(x, y)) 
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!isValidMove(x, y))
         return false;
-    
+
     board_[x][y] = HUMAN_PLAYER;
     moveCount_++;
     lastMove_ = {x, y};
-    
-    if (checkWin(x, y, HUMAN_PLAYER)) 
+
+    if (checkWin(x, y, HUMAN_PLAYER))
     {
         gameOver_ = true;
         winner_ = "human";
@@ -33,19 +35,25 @@ bool AiGame::humanMove(int x, int y)
 }
 
  // AI移动
-void AiGame::aiMove() 
+void AiGame::aiMove()
 {
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (gameOver_ || isDraw()) return;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    std::lock_guard<std::mutex> lock(mutex_);
     if (gameOver_ || isDraw()) return;
-    
-    std::this_thread::sleep_for(std::chrono::milliseconds(500)); // 添加500毫秒延时
+
     int x, y;
-    // 获取AI的最佳移动位置
     std::tie(x, y) = getBestMove();
     board_[x][y] = AI_PLAYER;
     moveCount_++;
     lastMove_ = {x, y};
-    
-    if (checkWin(x, y, AI_PLAYER)) 
+
+    if (checkWin(x, y, AI_PLAYER))
     {
         gameOver_ = true;
         winner_ = "ai";

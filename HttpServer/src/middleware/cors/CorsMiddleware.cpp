@@ -1,4 +1,5 @@
 #include "../../../include/middleware/cors/CorsMiddleware.h"
+#include "../../../include/utils/LogUtil.h"
 #include <algorithm>
 #include <sstream>
 #include <muduo/base/Logging.h>
@@ -64,9 +65,10 @@ void CorsMiddleware::handlePreflightRequest(const HttpRequest& request,
 {
     const std::string& origin = request.getHeader("Origin");
     
-    if (!isOriginAllowed(origin)) 
+    if (!isOriginAllowed(origin))
     {
         LOG_WARN << "Origin not allowed: " << origin;
+        LOG_UTIL_WARN("CORS: Origin not allowed: " << origin);
         response.setStatusCode(HttpResponse::k403Forbidden);
         return;
     }
@@ -105,9 +107,10 @@ void CorsMiddleware::addCorsHeaders(HttpResponse& response,
         
         LOG_DEBUG << "CORS headers added successfully";
     }
-    catch (const std::exception& e) 
+    catch (const std::exception& e)
     {
         LOG_ERROR << "Error adding CORS headers: " << e.what();
+        LOG_UTIL_ERROR("CORS header error: " << e.what());
     }
 }
 

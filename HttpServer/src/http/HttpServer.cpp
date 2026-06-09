@@ -1,4 +1,5 @@
 #include "../../include/http/HttpServer.h"
+#include "../../include/utils/LogUtil.h"
 
 #include <functional>
 #include <memory>
@@ -30,7 +31,10 @@ HttpServer::HttpServer(int port,
 // 启动服务器：启动 TcpServer 工作线程，主线程阻塞在事件循环
 void HttpServer::start()
 {
-    LOG_WARN << "HttpServer[" << server_.name() << "] starts listening on" << server_.ipPort();
+    LOG_WARN << "HttpServer[" << server_.name() << "] starts listening on " << server_.ipPort();
+    LOG_UTIL_INFO("Server starting: " << server_.name()
+                  << " on " << server_.ipPort()
+                  << (useSSL_ ? " (SSL enabled)" : ""));
     server_.start();
     mainLoop_.loop();
 }
@@ -58,8 +62,10 @@ void HttpServer::setSslConfig(const ssl::SslConfig& config)
         if (!sslCtx_->initialize())
         {
             LOG_ERROR << "Failed to initialize SSL context";
+            LOG_UTIL_ERROR("Failed to initialize SSL context, aborting");
             abort();
         }
+        LOG_UTIL_INFO("SSL context initialized successfully");
     }
 }
 
@@ -68,6 +74,8 @@ void HttpServer::onConnection(const muduo::net::TcpConnectionPtr& conn)
 {
     if (conn->connected())
     {
+        LOG_UTIL_INFO("New connection: " << conn->peerAddress().toIpPort()
+                      << " -> local " << conn->localAddress().toIpPort());
         if (useSSL_)
         {
             auto sslConn = std::make_unique<ssl::SslConnection>(conn, sslCtx_.get());
@@ -80,6 +88,7 @@ void HttpServer::onConnection(const muduo::net::TcpConnectionPtr& conn)
     }
     else
     {
+        LOG_UTIL_INFO("Connection closed: " << conn->peerAddress().toIpPort());
         if (useSSL_)
         {
             sslConns_.erase(conn);
@@ -128,6 +137,8 @@ void HttpServer::onMessage(const muduo::net::TcpConnectionPtr &conn,
         if (!context->parseRequest(buf, receiveTime)) // 解析一个http请求
         {
             // 如果解析http报文过程中出错
+            LOG_UTIL_WARN("Bad request from " << conn->peerAddress().toIpPort()
+                          << " - HTTP parse error");
             sendToClient(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
             conn->shutdown();
         }
@@ -142,6 +153,8 @@ void HttpServer::onMessage(const muduo::net::TcpConnectionPtr &conn,
     {
         // 捕获异常，返回错误信息
         LOG_ERROR << "Exception in onMessage: " << e.what();
+        LOG_UTIL_ERROR("Exception in onMessage from "
+                       << conn->peerAddress().toIpPort() << ": " << e.what());
         sendToClient(conn, "HTTP/1.1 400 Bad Request\r\n\r\n", 28);
         conn->shutdown();
     }
@@ -175,8 +188,6 @@ void HttpServer::onRequest(const muduo::net::TcpConnectionPtr &conn, const HttpR
     // 根据请求报文信息来封装响应报文对象
     muduo::net::Buffer buf;
     response.appendToBuffer(&buf);
-    // 打印完整的响应内容用于调试
-    LOG_INFO << "Sending response:\n" << buf.toStringPiece().as_string();
 
     sendToClient(conn, buf.peek(), buf.readableBytes());
     // 如果是短连接的话，返回响应报文后就断开连接
@@ -201,6 +212,8 @@ void HttpServer::handleRequest(const HttpRequest &req, HttpResponse *resp)
         {
             LOG_INFO << "method：" << req.method() << "，path：" << req.path();
             LOG_INFO << "未找到路由，404";
+            LOG_UTIL_WARN("Route not found: method=" << static_cast<int>(req.method())
+                          << " path=" << req.path());
             resp->setStatusCode(HttpResponse::k404NotFound);
             resp->setStatusMessage("Not Found");
             resp->setCloseConnection(true);
@@ -214,9 +227,10 @@ void HttpServer::handleRequest(const HttpRequest &req, HttpResponse *resp)
         // 处理中间件抛出的响应（如CORS预检请求）
         *resp = res;
     }
-    catch (const std::exception& e) 
+    catch (const std::exception& e)
     {
         // 错误处理
+        LOG_UTIL_ERROR("Internal server error: " << e.what());
         resp->setStatusCode(HttpResponse::k500InternalServerError);
         resp->setBody(e.what());
     }

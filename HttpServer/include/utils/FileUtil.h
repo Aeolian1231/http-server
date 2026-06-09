@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <muduo/base/Logging.h>
+#include "LogUtil.h"
 
 class FileUtil
 {
@@ -43,10 +44,12 @@ public:
         if (file_.read(buffer.data(), size()))
         {
             LOG_INFO << "File content load into memory (" << size() << " bytes)";
-        }    
+            LOG_UTIL_INFO("File read: " << filePath_ << " (" << size() << " bytes)");
+        }
         else
         {
             LOG_ERROR << "File read failed";
+            LOG_UTIL_ERROR("File read failed: " << filePath_);
         }
     }
 

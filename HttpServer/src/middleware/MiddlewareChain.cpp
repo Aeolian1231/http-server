@@ -1,4 +1,5 @@
 #include "../../include/middleware/MiddlewareChain.h"
+#include "../../include/utils/LogUtil.h"
 #include <muduo/base/Logging.h>
 
 namespace http
@@ -36,6 +37,7 @@ void MiddlewareChain::processAfter(HttpResponse &response)
     catch (const std::exception &e)
     {
         LOG_ERROR << "Error in middleware after processing: " << e.what();
+        LOG_UTIL_ERROR("Middleware after-processing error: " << e.what());
     }
 }
 

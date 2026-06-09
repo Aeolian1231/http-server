@@ -2,6 +2,7 @@
 #include "../../../HttpServer/include/http/HttpRequest.h"
 #include "../../../HttpServer/include/http/HttpResponse.h"
 #include "../../../HttpServer/include/http/HttpServer.h"
+#include "../../../HttpServer/include/utils/LogUtil.h"
 
 using namespace http;
 
@@ -115,6 +116,25 @@ void GomokuServer::initializeRouter()
     httpServer_.Get("/backend_data", [this](const http::HttpRequest& req, http::HttpResponse* resp) {
         getBackendData(req, resp);
     });
+    // 网站图标
+    httpServer_.Get("/favicon.ico", [](const http::HttpRequest& req, http::HttpResponse* resp) {
+        std::string reqFile("../WebApps/GomokuServer/resource/favicon.ico");
+        FileUtil fileOperater(reqFile);
+        if (!fileOperater.isValid())
+        {
+            resp->setStatusCode(http::HttpResponse::k404NotFound);
+            resp->setCloseConnection(true);
+            return;
+        }
+        std::vector<char> buffer(fileOperater.size());
+        fileOperater.readFile(buffer);
+        std::string bufStr(buffer.data(), buffer.size());
+        resp->setStatusLine(req.getVersion(), http::HttpResponse::k200Ok, "OK");
+        resp->setCloseConnection(false);
+        resp->setContentType("image/x-icon");
+        resp->setContentLength(bufStr.size());
+        resp->setBody(bufStr);
+    });
 }
 
 void GomokuServer::restartChessGameVsAi(const http::HttpRequest &req, http::HttpResponse *resp)
@@ -124,6 +144,7 @@ void GomokuServer::restartChessGameVsAi(const http::HttpRequest &req, http::Http
     if (session->getValue("isLoggedIn") != "true")
     {
         // 用户未登录，返回未授权错误
+        LOG_UTIL_WARN("Game restart: unauthorized access attempt");
         json errorResp;
         errorResp["status"] = "error";
         errorResp["message"] = "Unauthorized";
@@ -143,6 +164,7 @@ void GomokuServer::restartChessGameVsAi(const http::HttpRequest &req, http::Http
             aiGames_.erase(userId);
         aiGames_[userId] = std::make_shared<AiGame>(userId);
     }
+    LOG_UTIL_INFO("Game restarted: userId=" << userId);
 
     json successResp;
     successResp["status"] = "ok";
@@ -190,6 +212,7 @@ void GomokuServer::getBackendData(const http::HttpRequest &req, http::HttpRespon
     catch (const std::exception& e)
     {
         LOG_ERROR << "Error in getBackendData: " << e.what();
+        LOG_UTIL_ERROR("Backend data query failed: " << e.what());
 
         // 错误响应
         nlohmann::json errorBody = {
@@ -254,6 +277,7 @@ void GomokuServer::handleEntry(const http::HttpRequest& req, http::HttpResponse*
     if (!fileOperater.isValid())
     {
         LOG_WARN << reqFile << " not exist";
+        LOG_UTIL_WARN("File not found: " << reqFile << ", using 404 page");
         fileOperater.resetDefaultFile(); // 404 NOT FOUND
     }
 
@@ -274,6 +298,7 @@ void GomokuServer::handleLogin(const http::HttpRequest& req, http::HttpResponse*
     if (contentType.empty() || contentType != "application/json" || req.getBody().empty())
     {
         LOG_INFO << "content" << req.getBody();
+        LOG_UTIL_WARN("Login request rejected: invalid Content-Type or empty body");
         resp->setStatusLine(req.getVersion(), http::HttpResponse::k400BadRequest, "Bad Request");
         resp->setCloseConnection(true);
         resp->setContentType("application/json");
@@ -302,6 +327,12 @@ void GomokuServer::handleLogin(const http::HttpRequest& req, http::HttpResponse*
                 }
 
                 updateMaxOnline(onlineUsers_.size());
+                LOG_INFO << "User " << userId << " (" << username
+                         << ") logged in, online: " << onlineUsers_.size();
+                LOG_UTIL_INFO("User login: userId=" << userId
+                              << " username=" << username
+                              << " online=" << onlineUsers_.size());
+
                 json successResp;
                 successResp["success"] = true;
                 successResp["userId"] = userId;
@@ -316,6 +347,10 @@ void GomokuServer::handleLogin(const http::HttpRequest& req, http::HttpResponse*
             }
             else
             {
+                LOG_WARN << "User " << userId << " (" << username
+                         << ") already online, rejecting login";
+                LOG_UTIL_WARN("User login rejected (already online): userId=" << userId
+                              << " username=" << username);
                 json failureResp;
                 failureResp["success"] = false;
                 failureResp["error"] = "账号已在其他地方登录";
@@ -331,6 +366,7 @@ void GomokuServer::handleLogin(const http::HttpRequest& req, http::HttpResponse*
         }
         else
         {
+            LOG_UTIL_WARN("Login failed: invalid credentials for username=" << username);
             json failureResp;
             failureResp["status"] = "error";
             failureResp["message"] = "Invalid username or password";
@@ -346,6 +382,7 @@ void GomokuServer::handleLogin(const http::HttpRequest& req, http::HttpResponse*
     }
     catch (const std::exception &e)
     {
+        LOG_UTIL_ERROR("Login handler exception: " << e.what());
         json failureResp;
         failureResp["status"] = "error";
         failureResp["message"] = e.what();
@@ -438,8 +475,10 @@ bool GomokuServer::isUserExist(const std::string &username)
 void GomokuServer::handleLogout(const http::HttpRequest& req, http::HttpResponse* resp)
 {
     auto contentType = req.getHeader("Content-Type");
-    if (contentType.empty() || contentType != "application/json" || req.getBody().empty())
+    if (contentType.empty() || contentType.find("application/json") == std::string::npos || req.getBody().empty())
     {
+        LOG_WARN << "Logout request rejected: invalid Content-Type or empty body";
+        LOG_UTIL_WARN("Logout request rejected: invalid Content-Type or empty body");
         resp->setStatusLine(req.getVersion(), http::HttpResponse::k400BadRequest, "Bad Request");
         resp->setCloseConnection(true);
         resp->setContentType("application/json");
@@ -450,27 +489,44 @@ void GomokuServer::handleLogout(const http::HttpRequest& req, http::HttpResponse
 
     try
     {
-        auto session = getSessionManager()->getSession(req, resp);
-        int userId = std::stoi(session->getValue("userId"));
-        session->clear();
-        getSessionManager()->destroySession(session->getId());
-
         json parsed = json::parse(req.getBody());
+        int userId = parsed["userId"];
         int gameType = parsed["gameType"];
+        std::string type = parsed.value("type", "unknown");
 
+        LOG_INFO << "Logout request: userId=" << userId << " gameType=" << gameType
+                 << " type=" << type;
+
+        // 清理 session（best-effort）
+        try
+        {
+            auto session = getSessionManager()->getSession(req, resp);
+            if (session && !session->getValue("userId").empty())
+            {
+                session->clear();
+                getSessionManager()->destroySession(session->getId());
+            }
+        }
+        catch (const std::exception& e)
+        {
+            LOG_ERROR << "Session cleanup failed: " << e.what();
+            LOG_UTIL_WARN("Logout session cleanup failed: " << e.what());
+        }
+
+        // 使用请求体中的 userId 清理在线状态
         {
             std::lock_guard<std::mutex> lock(mutexForOnlineUsers_);
             onlineUsers_.erase(userId);
         }
+        LOG_INFO << "User " << userId << " logged out, online: " << onlineUsers_.size();
+        LOG_UTIL_INFO("User logout: userId=" << userId
+                      << " online=" << onlineUsers_.size());
 
         if (gameType == GomokuServer::MAN_VS_AI)
         {
             std::lock_guard<std::mutex> lock(mutexForAiGames_);
             aiGames_.erase(userId);
-        }
-        else if (gameType == GomokuServer::MAN_VS_MAN)
-        {
-            // 释放相应创造资源，并且通知另一个用户对方已经主动退出游戏
+            LOG_INFO << "AI game cleaned up for user " << userId;
         }
 
         json response;
@@ -484,6 +540,8 @@ void GomokuServer::handleLogout(const http::HttpRequest& req, http::HttpResponse
     }
     catch (const std::exception &e)
     {
+        LOG_ERROR << "Logout failed: " << e.what();
+        LOG_UTIL_ERROR("Logout handler exception: " << e.what());
         json failureResp;
         failureResp["status"] = "error";
         failureResp["message"] = e.what();
@@ -504,6 +562,7 @@ void GomokuServer::handleMenu(const http::HttpRequest& req, http::HttpResponse* 
         LOG_INFO << "session->getValue(\"isLoggedIn\") = " << session->getValue("isLoggedIn");
         if (session->getValue("isLoggedIn") != "true")
         {
+            LOG_UTIL_WARN("Menu access: unauthorized attempt");
             json errorResp;
             errorResp["status"] = "error";
             errorResp["message"] = "Unauthorized";
@@ -562,6 +621,7 @@ void GomokuServer::handleAiGameStart(const http::HttpRequest& req, http::HttpRes
     auto session = getSessionManager()->getSession(req, resp);
     if (session->getValue("isLoggedIn") != "true")
     {
+        LOG_UTIL_WARN("Game start: unauthorized attempt");
         json errorResp;
         errorResp["status"] = "error";
         errorResp["message"] = "Unauthorized";
@@ -574,6 +634,7 @@ void GomokuServer::handleAiGameStart(const http::HttpRequest& req, http::HttpRes
     }
 
     int userId = std::stoi(session->getValue("userId"));
+    LOG_UTIL_INFO("AI game started: userId=" << userId);
 
     {
         std::lock_guard<std::mutex> lock(mutexForAiGames_);
@@ -608,6 +669,7 @@ void GomokuServer::handleAiGameMove(const http::HttpRequest& req, http::HttpResp
         auto session = getSessionManager()->getSession(req, resp);
         if (session->getValue("isLoggedIn") != "true")
         {
+            LOG_UTIL_WARN("Game move: unauthorized attempt");
             json errorResp;
             errorResp["status"] = "error";
             errorResp["message"] = "Unauthorized";
@@ -623,6 +685,7 @@ void GomokuServer::handleAiGameMove(const http::HttpRequest& req, http::HttpResp
         json request = json::parse(req.getBody());
         int x = request["x"];
         int y = request["y"];
+        LOG_UTIL_INFO("Game move: userId=" << userId << " pos=(" << x << "," << y << ")");
 
         if (aiGames_.find(userId) == aiGames_.end())
         {
@@ -633,6 +696,7 @@ void GomokuServer::handleAiGameMove(const http::HttpRequest& req, http::HttpResp
 
         if (!game->humanMove(x, y))
         {
+            LOG_UTIL_WARN("Game move invalid: userId=" << userId << " pos=(" << x << "," << y << ")");
             json response = {
                 {"status", "error"},
                 {"message", "Invalid move"}};
@@ -757,6 +821,7 @@ void GomokuServer::handleAiGameMove(const http::HttpRequest& req, http::HttpResp
     }
     catch (const std::exception &e)
     {
+        LOG_UTIL_ERROR("Game move handler exception: " << e.what());
         json response = {
             {"status", "error"},
             {"message", e.what()}};

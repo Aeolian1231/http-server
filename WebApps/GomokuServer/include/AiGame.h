@@ -22,7 +22,6 @@ public:
     // 判断是否平局
     bool isDraw() const
     {
-        std::lock_guard<std::mutex> lock(mutex_);
         return moveCount_ >= BOARD_SIZE * BOARD_SIZE;
     }
 
@@ -59,12 +58,12 @@ public:
     }
 
 private:
-    // 检查移动是否有效
-    bool isValidMove(int x, int y) const 
+    // 检查移动是否有效（调用方需持有 mutex_）
+    bool isValidMove(int x, int y) const
     {
         if (x < 0 || x >= BOARD_SIZE || y < 0 || y >= BOARD_SIZE) return false;
         if (board_[x][y] != EMPTY) return false;
-        if (gameOver_ || isDraw()) return false;
+        if (gameOver_ || moveCount_ >= BOARD_SIZE * BOARD_SIZE) return false;
         return true;
     }
 

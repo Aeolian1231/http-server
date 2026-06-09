@@ -1,4 +1,5 @@
 #include "../../include/http/HttpContext.h"
+#include "../../include/utils/LogUtil.h"
 
 using namespace muduo;
 using namespace muduo::net;
@@ -118,6 +119,9 @@ bool HttpContext::parseRequest(Buffer *buf, Timestamp receiveTime)
             hasMore = false;
         }
     }
+    if (!ok)
+        LOG_UTIL_WARN("HTTP parse error: invalid request line or header format");
+
     return ok; // ok为false代表报文语法解析错误
 }
 
