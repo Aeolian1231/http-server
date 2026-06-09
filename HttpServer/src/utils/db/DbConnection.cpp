@@ -16,7 +16,7 @@ DbConnection::DbConnection(const std::string& host,
     , password_(password)
     , database_(database)
 {
-    try 
+    try
     {
         sql::mysql::MySQL_Driver* driver = sql::mysql::get_mysql_driver_instance();
         conn_.reset(driver->connect(host_, user_, password_));
@@ -60,7 +60,6 @@ bool DbConnection::ping()
 {
     try 
     {
-        // 不使用 getStmt，直接创建新的语句
         std::unique_ptr<sql::Statement> stmt(conn_->createStatement());
         std::unique_ptr<sql::ResultSet> rs(stmt->executeQuery("SELECT 1"));
         return true;
@@ -72,44 +71,45 @@ bool DbConnection::ping()
     }
 }
 
-bool DbConnection::isValid() 
-{
-    try 
-    {
-        if (!conn_) return false;
-        std::unique_ptr<sql::Statement> stmt(conn_->createStatement());
-        stmt->execute("SELECT 1");
-        return true;
-    } 
-    catch (const sql::SQLException&) 
-    {
-        return false;
-    }
-}
+// bool DbConnection::isValid() 
+// {
+//     try 
+//     {
+//         if (!conn_) return false;
+//         std::unique_ptr<sql::Statement> stmt(conn_->createStatement());
+//         stmt->execute("SELECT 1");
+//         return true;
+//     } 
+//     catch (const sql::SQLException&) 
+//     {
+//         return false;
+//     }
+// }
 
-void DbConnection::reconnect() 
+void DbConnection::reconnect()
 {
     try 
     {
-        if (conn_) 
+        if (conn_)
         {
             conn_->reconnect();
-        } 
+        }
+        // 裸指针为空时，尝试重新连接
         else 
         {
             sql::mysql::MySQL_Driver* driver = sql::mysql::get_mysql_driver_instance();
             conn_.reset(driver->connect(host_, user_, password_));
             conn_->setSchema(database_);
         }
-    } 
-    catch (const sql::SQLException& e) 
+    }
+    catch (const sql::SQLException& e)
     {
         LOG_ERROR << "Reconnect failed: " << e.what();
         throw DbException(e.what());
     }
 }
 
-void DbConnection::cleanup() 
+void DbConnection::cleanup()
 {
     std::lock_guard<std::mutex> lock(mutex_);
     try 
@@ -117,7 +117,7 @@ void DbConnection::cleanup()
         if (conn_) 
         {
             // 确保所有事务都已完成
-            if (!conn_->getAutoCommit()) 
+            if (!conn_->getAutoCommit())
             {
                 conn_->rollback();
                 conn_->setAutoCommit(true);
@@ -135,7 +135,7 @@ void DbConnection::cleanup()
             }
         }
     } 
-    catch (const std::exception& e) 
+    catch (const std::exception& e)
     {
         LOG_WARN << "Error cleaning up connection: " << e.what();
         try 

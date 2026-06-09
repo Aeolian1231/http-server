@@ -45,14 +45,14 @@ DbConnectionPool::DbConnectionPool()
 DbConnectionPool::~DbConnectionPool() 
 {
     std::lock_guard<std::mutex> lock(mutex_);
-    while (!connections_.empty()) 
+    while (!connections_.empty())
     {
         connections_.pop();
     }
     LOG_INFO << "Database connection pool destroyed";
 }
 
-// 修改获取连接的函数
+// 获取连接
 std::shared_ptr<DbConnection> DbConnectionPool::getConnection() 
 {
     std::shared_ptr<DbConnection> conn;
@@ -69,26 +69,32 @@ std::shared_ptr<DbConnection> DbConnectionPool::getConnection()
             cv_.wait(lock);
         }
         
+        // queue FIFO
+        // A conn ref = 2
         conn = connections_.front();
         connections_.pop();
     } // 释放锁
-    
-    try 
+      
+    try
     {
         // 在锁外检查连接
-        if (!conn->ping()) 
+        // 连接意外断开（超时或异常）时，尝试重新连接
+        if (!conn->ping())
         {
             LOG_WARN << "Connection lost, attempting to reconnect...";
             conn->reconnect();
         }
         
-        return std::shared_ptr<DbConnection>(conn.get(), 
+        // shared_ptr 构造函数的第二参数是一个可调用对象，引用计数归零时调用它
+        // return后conn离开作用域被销毁，A ref-1 = 1，B ref = 1
+        // B 使用完成ref = 0调用LAMBDA函数，将连接返回连接池并唤醒等待线程
+        return std::shared_ptr<DbConnection>(conn.get(),
             [this, conn](DbConnection*) {
                 std::lock_guard<std::mutex> lock(mutex_);
                 connections_.push(conn);
                 cv_.notify_one();
             });
-    } 
+    }
     catch (const std::exception& e) 
     {
         LOG_ERROR << "Failed to get connection: " << e.what();
@@ -106,7 +112,8 @@ std::shared_ptr<DbConnection> DbConnectionPool::createConnection()
     return std::make_shared<DbConnection>(host_, user_, password_, database_);
 }
 
-// 修改检查连接的函数
+// 检查连接
+// 两层防护：借出时检查+心跳检测
 void DbConnectionPool::checkConnections() 
 {
     while (true) 
@@ -130,7 +137,7 @@ void DbConnectionPool::checkConnections()
                 }
             }
             
-            // 在锁外检查连接
+            // 在锁外检查连接，避免长时间阻塞主线程
             for (auto& conn : connsToCheck) 
             {
                 if (!conn->ping()) 

@@ -412,10 +412,10 @@ int GomokuServer::insertUser(const std::string &username, const std::string &pas
 {
     if (!isUserExist(username))
     {
-        std::string sql = "INSERT INTO users (username, password) VALUES ('" + username + "', '" + password + "')";
-        mysqlUtil_.executeUpdate(sql);
-        std::string sql2 = "SELECT id FROM users WHERE username = '" + username + "'";
-        sql::ResultSet* res = mysqlUtil_.executeQuery(sql2);
+        std::string sql = "INSERT INTO users (username, password) VALUES (?, ?)";
+        mysqlUtil_.executeUpdate(sql, username, password);
+        std::string sql2 = "SELECT id FROM users WHERE username = ?";
+        sql::ResultSet* res = mysqlUtil_.executeQuery(sql2, username);
         if (res->next())
         {
             return res->getInt("id");
@@ -426,8 +426,8 @@ int GomokuServer::insertUser(const std::string &username, const std::string &pas
 
 bool GomokuServer::isUserExist(const std::string &username)
 {
-    std::string sql = "SELECT id FROM users WHERE username = '" + username + "'";
-    sql::ResultSet* res = mysqlUtil_.executeQuery(sql);
+    std::string sql = "SELECT id FROM users WHERE username = ?";
+    sql::ResultSet* res = mysqlUtil_.executeQuery(sql, username);
     if (res->next())
     {
         return true;
