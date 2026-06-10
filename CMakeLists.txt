@@ -1,86 +1,103 @@
 cmake_minimum_required(VERSION 3.10)
-project(simple_server)
+project(http_server)
 
-# 设置 C++ 标准
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# 在文件开头添加 OpenSSL 查找
+# ---- 查找依赖库 ----
 find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system chrono)
+find_package(OpenCV QUIET)
 
-# 添加头文件路径
-include_directories(
-    ${PROJECT_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/HttpServer/include
-    ${PROJECT_SOURCE_DIR}/WebApps/GomokuServer/include
-    /usr/include/mysql-cppconn-8
-    /usr/include/mysql
-    ${OPENSSL_INCLUDE_DIR}
-)
-
-# 查找必要的库
 find_library(MYSQLCPPCONN_LIBRARY
     NAMES mysqlcppconn mysqlcppconn8
     PATHS /usr/lib /usr/lib64 /usr/local/lib
 )
 
-# 添加所有源文件
+find_library(ONNXRUNTIME_LIBRARY
+    NAMES onnxruntime
+    PATHS /usr/lib /usr/lib64 /usr/local/lib
+)
+
+# ---- 头文件路径 ----
+include_directories(
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/HttpServer/include
+    ${PROJECT_SOURCE_DIR}/Apps/ChatServer/include
+    ${PROJECT_SOURCE_DIR}/Apps/GomokuServer/include
+    /usr/include/mysql-cppconn-8
+    /usr/include/mysql
+    ${OPENSSL_INCLUDE_DIR}
+    ${CURL_INCLUDE_DIRS}
+    /usr/include/opencv4
+    /usr/local/include
+)
+
+link_directories(/usr/local/lib)
+
+# ---- HttpServer 公共源码（编译为 object 库避免重复编译） ----
 file(GLOB_RECURSE HTTP_SERVER_SRC
     "${PROJECT_SOURCE_DIR}/HttpServer/src/*.cpp"
 )
+add_library(http_server_obj OBJECT ${HTTP_SERVER_SRC})
 
-file(GLOB_RECURSE GOMOKU_SERVER_SRC
-    "${PROJECT_SOURCE_DIR}/WebApps/GomokuServer/src/*.cpp"
-)
-
-# 添加主程序文件
-set(MAIN_SRC "${PROJECT_SOURCE_DIR}/WebApps/GomokuServer/src/main.cpp")
-
-# 如果主程序文件不存在，创建一个
-if(NOT EXISTS ${MAIN_SRC})
-    file(WRITE ${MAIN_SRC}
-"#include \"../include/GomokuServer.h\"
-#include <iostream>
-
-int main(int argc, char* argv[]) {
-    try {
-        GomokuServer server;
-        server.start();
-        return 0;
-    } catch (const std::exception& e) {
-        std::cerr << \"Error: \" << e.what() << std::endl;
-        return 1;
-    }
-}
-")
-endif()
-
-# 添加可执行文件
-add_executable(simple_server
-    ${MAIN_SRC}
-    ${HTTP_SERVER_SRC}
-    ${GOMOKU_SERVER_SRC}
-)
-
-# 链接必要的库
-target_link_libraries(simple_server
+# ---- 基础公共库（两个 server 都需要的） ----
+set(COMMON_LIBS
     pthread
     muduo_net
     muduo_base
-    mysqlcppconn
+    ${MYSQLCPPCONN_LIBRARY}
     mysqlclient
-    ssl
-    crypto
+    ${OPENSSL_LIBRARIES}
 )
 
-# 打印调试信息
-message(STATUS "Include directories:")
-get_property(dirs DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
-foreach(dir ${dirs})
-    message(STATUS "  ${dir}")
-endforeach()
+# ==================== ChatServer ====================
+file(GLOB_RECURSE CHAT_SERVER_SRC
+    "${PROJECT_SOURCE_DIR}/Apps/ChatServer/src/*.cpp"
+)
+list(REMOVE_ITEM CHAT_SERVER_SRC "${PROJECT_SOURCE_DIR}/Apps/ChatServer/src/main.cpp")
 
-message(STATUS "Main source file: ${MAIN_SRC}")
-message(STATUS "HTTP Server sources: ${HTTP_SERVER_SRC}")
-message(STATUS "Gomoku Server sources: ${GOMOKU_SERVER_SRC}")
+add_executable(chat_server
+    "${PROJECT_SOURCE_DIR}/Apps/ChatServer/src/main.cpp"
+    ${CHAT_SERVER_SRC}
+    $<TARGET_OBJECTS:http_server_obj>
+)
+
+target_link_libraries(chat_server
+    ${COMMON_LIBS}
+    ${CURL_LIBRARIES}
+    ${Boost_LIBRARIES}
+    ${OpenCV_LIBS}
+    SimpleAmqpClient
+    rabbitmq
+)
+
+if(ONNXRUNTIME_LIBRARY)
+    target_link_libraries(chat_server ${ONNXRUNTIME_LIBRARY})
+endif()
+
+# ==================== GomokuServer ====================
+file(GLOB_RECURSE GOMOKU_SERVER_SRC
+    "${PROJECT_SOURCE_DIR}/Apps/GomokuServer/src/*.cpp"
+)
+list(REMOVE_ITEM GOMOKU_SERVER_SRC "${PROJECT_SOURCE_DIR}/Apps/GomokuServer/src/main.cpp")
+
+add_executable(gomoku_server
+    "${PROJECT_SOURCE_DIR}/Apps/GomokuServer/src/main.cpp"
+    ${GOMOKU_SERVER_SRC}
+    $<TARGET_OBJECTS:http_server_obj>
+)
+
+target_link_libraries(gomoku_server
+    ${COMMON_LIBS}
+)
+
+# ---- 调试输出 ----
+message(STATUS "=== ChatServer ===")
+message(STATUS "  sources: ${CHAT_SERVER_SRC}")
+message(STATUS "  ONNX Runtime: ${ONNXRUNTIME_LIBRARY}")
+
+message(STATUS "=== GomokuServer ===")
+message(STATUS "  sources: ${GOMOKU_SERVER_SRC}")

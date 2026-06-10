@@ -118,7 +118,7 @@ void GomokuServer::initializeRouter()
     });
     // 网站图标
     httpServer_.Get("/favicon.ico", [](const http::HttpRequest& req, http::HttpResponse* resp) {
-        std::string reqFile("../WebApps/GomokuServer/resource/favicon.ico");
+        std::string reqFile("../Apps/GomokuServer/resource/favicon.ico");
         FileUtil fileOperater(reqFile);
         if (!fileOperater.isValid())
         {
@@ -272,7 +272,7 @@ void GomokuServer::packageResp(const std::string &version,
 void GomokuServer::handleEntry(const http::HttpRequest& req, http::HttpResponse* resp)
 {
     std::string reqFile;
-    reqFile.append("../WebApps/GomokuServer/resource/entry.html");
+    reqFile.append("../Apps/GomokuServer/resource/entry.html");
     FileUtil fileOperater(reqFile);
     if (!fileOperater.isValid())
     {
@@ -577,7 +577,7 @@ void GomokuServer::handleMenu(const http::HttpRequest& req, http::HttpResponse* 
         int userId = std::stoi(session->getValue("userId"));
         std::string username = session->getValue("username");
 
-        std::string reqFile("../WebApps/GomokuServer/resource/menu.html");
+        std::string reqFile("../Apps/GomokuServer/resource/menu.html");
         FileUtil fileOperater(reqFile);
         if (!fileOperater.isValid())
         {
@@ -643,7 +643,7 @@ void GomokuServer::handleAiGameStart(const http::HttpRequest& req, http::HttpRes
         aiGames_[userId] = std::make_shared<AiGame>(userId);
     }
 
-    std::string reqFile("../WebApps/GomokuServer/resource/ChessGameVsAi.html");
+    std::string reqFile("../Apps/GomokuServer/resource/ChessGameVsAi.html");
     FileUtil fileOperater(reqFile);
     if (!fileOperater.isValid())
     {
@@ -832,7 +832,7 @@ void GomokuServer::handleAiGameMove(const http::HttpRequest& req, http::HttpResp
 
 void GomokuServer::handleGameBackend(const http::HttpRequest& req, http::HttpResponse* resp)
 {
-    std::string reqFile("../WebApps/GomokuServer/resource/Backend.html");
+    std::string reqFile("../Apps/GomokuServer/resource/Backend.html");
     FileUtil fileOperater(reqFile);
     if (!fileOperater.isValid())
     {
